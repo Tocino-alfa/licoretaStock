@@ -145,6 +145,7 @@
     Entrar con Google
   </button>
   <p style="font-size:11px;color:var(--text3);margin-top:20px;line-height:1.6">Tus datos se guardan en tu<br>Google Drive de forma privada</p>
+  <p id="login-btn-status" style="font-size:11px;color:var(--danger);margin-top:8px;min-height:16px"></p>
 </div>
 
 <div id="app" style="display:none">
@@ -183,26 +184,29 @@ let gToken=null;
 let driveFileId=null;
 let syncTimeout=null;
 
+let gsiReady=false;
+
 function hideLoading(){}
 
 function gisLoaded(){
-  const stored=localStorage.getItem('ls_token');
-  if(stored){
-    try{
-      const t=JSON.parse(stored);
-      if(t.expires>Date.now()){gToken=t.token;hideLoading();loadDriveData();return;}
-    }catch(e){}
-  }
-  showLoginScreen();
+  gsiReady=true;
 }
 
 function showLoginScreen(){
-  hideLoading();
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
 }
 
+function showApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+}
+
 function signIn(){
+  if(!gsiReady){
+    alert('Google aún está cargando. Espera unos segundos e inténtalo de nuevo.');
+    return;
+  }
   const client=google.accounts.oauth2.initTokenClient({
     client_id:CLIENT_ID,
     scope:SCOPES,
@@ -210,9 +214,7 @@ function signIn(){
       if(resp.error){alert('Error al iniciar sesión: '+resp.error);return;}
       gToken=resp.access_token;
       localStorage.setItem('ls_token',JSON.stringify({token:gToken,expires:Date.now()+3500000}));
-      hideLoading();
-      document.getElementById('login-screen').style.display='none';
-      document.getElementById('app').style.display='flex';
+      showApp();
       loadDriveData();
     }
   });
@@ -221,11 +223,10 @@ function signIn(){
 
 function signOut(){
   if(!confirm('¿Cerrar sesión? Los datos seguirán guardados en Google Drive.'))return;
-  google.accounts.oauth2.revoke(gToken,()=>{});
+  if(gsiReady&&gToken) google.accounts.oauth2.revoke(gToken,()=>{});
   gToken=null;driveFileId=null;
   localStorage.removeItem('ls_token');
-  document.getElementById('app').style.display='none';
-  document.getElementById('login-screen').style.display='flex';
+  showLoginScreen();
 }
 
 async function driveRequest(url,options={}){
@@ -829,30 +830,32 @@ function addFAB(fn){
 function removeFAB(){const f=document.getElementById('fab');if(f)f.remove();}
 
 window.addEventListener('load',()=>{
+  // Si hay token guardado válido, entrar directamente sin esperar a GSI
   const stored=localStorage.getItem('ls_token');
   if(stored){
     try{
       const t=JSON.parse(stored);
       if(t.expires>Date.now()){
         gToken=t.token;
-        document.getElementById('login-screen').style.display='none';
-        document.getElementById('app').style.display='flex';
+        showApp();
         loadDriveData();
+        // GSI sigue cargando en segundo plano para poder renovar token si hace falta
+        const s=document.querySelector('script[src*="gsi"]');
+        if(s) s.addEventListener('load',()=>{gsiReady=true;});
         return;
       }
-    }catch(e){}
+    }catch(e){localStorage.removeItem('ls_token');}
   }
-  const gsiScript=document.querySelector('script[src*="gsi"]');
-  if(typeof google!=='undefined'&&google.accounts){
-    gisLoaded();
-  } else {
-    gsiScript.addEventListener('load',gisLoaded);
-    gsiScript.addEventListener('error',showLoginScreen);
-    setTimeout(()=>{
-      if(document.getElementById('login-screen').style.display==='flex') return;
-      showLoginScreen();
-    },4000);
+  // Sin token: mostrar login y esperar a GSI
+  showLoginScreen();
+  const s=document.querySelector('script[src*="gsi"]');
+  if(s){
+    s.addEventListener('load',()=>{gsiReady=true;});
+    s.addEventListener('error',()=>{
+      document.getElementById('login-btn-status').textContent='Sin conexión con Google. Comprueba tu red.';
+    });
   }
+  if(typeof google!=='undefined'&&google.accounts) gsiReady=true;
 });
 </script>
 </body>

@@ -137,12 +137,7 @@
 </style>
 </head>
 <body>
-<div id="loading-screen" style="position:fixed;inset:0;background:var(--bg);z-index:998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">
-  <h1 style="font-family:var(--serif);font-size:24px;font-weight:600">LicoretaStock</h1>
-  <p style="font-size:13px;color:var(--text3)">Cargando…</p>
-</div>
-
-<div id="login-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:999;flex-direction:column;align-items:center;justify-content:center;padding:40px 32px;text-align:center;">
+<div id="login-screen" style="display:flex;position:fixed;inset:0;background:var(--bg);z-index:999;flex-direction:column;align-items:center;justify-content:center;padding:40px 32px;text-align:center;">
   <h1 style="font-family:var(--serif);font-size:28px;font-weight:600;margin-bottom:8px">LicoretaStock</h1>
   <p style="font-size:14px;color:var(--text2);margin-bottom:40px;line-height:1.6">Control de stock para<br>hostelería ambulante</p>
   <button onclick="signIn()" class="btn btn-primary" style="width:100%;justify-content:center;padding:13px;font-size:15px">
@@ -188,10 +183,7 @@ let gToken=null;
 let driveFileId=null;
 let syncTimeout=null;
 
-function hideLoading(){
-  const l=document.getElementById('loading-screen');
-  if(l)l.style.display='none';
-}
+function hideLoading(){}
 
 function gisLoaded(){
   const stored=localStorage.getItem('ls_token');
@@ -837,14 +829,29 @@ function addFAB(fn){
 function removeFAB(){const f=document.getElementById('fab');if(f)f.remove();}
 
 window.addEventListener('load',()=>{
-  const fallback=setTimeout(()=>{
-    if(document.getElementById('loading-screen').style.display!=='none') showLoginScreen();
-  },5000);
-  if(typeof google!=='undefined'&&google.accounts){clearTimeout(fallback);gisLoaded();}
-  else{
-    const gsiScript=document.querySelector('script[src*="gsi"]');
-    gsiScript.addEventListener('load',()=>{clearTimeout(fallback);gisLoaded();});
-    gsiScript.addEventListener('error',()=>{clearTimeout(fallback);showLoginScreen();});
+  const stored=localStorage.getItem('ls_token');
+  if(stored){
+    try{
+      const t=JSON.parse(stored);
+      if(t.expires>Date.now()){
+        gToken=t.token;
+        document.getElementById('login-screen').style.display='none';
+        document.getElementById('app').style.display='flex';
+        loadDriveData();
+        return;
+      }
+    }catch(e){}
+  }
+  const gsiScript=document.querySelector('script[src*="gsi"]');
+  if(typeof google!=='undefined'&&google.accounts){
+    gisLoaded();
+  } else {
+    gsiScript.addEventListener('load',gisLoaded);
+    gsiScript.addEventListener('error',showLoginScreen);
+    setTimeout(()=>{
+      if(document.getElementById('login-screen').style.display==='flex') return;
+      showLoginScreen();
+    },4000);
   }
 });
 </script>
